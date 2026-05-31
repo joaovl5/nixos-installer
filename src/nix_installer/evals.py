@@ -1,3 +1,4 @@
+import json
 import subprocess
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -36,15 +37,20 @@ class BaseNixRef(ABC):
             raise NixRefError(msg)
         return Path(store_path_str)
 
-    def run_eval_raw(self) -> str:
-        """Run eval without post-processing output."""
+    def run_eval_raw(
+        self,
+        *,
+        apply: str | None = "toString",
+        json_output: bool = False,
+    ) -> str:
+        """Run eval and return raw stdout."""
         result = subprocess.run(
             [
                 "nix",
                 *NIX_FLAGS,
                 "eval",
-                "--apply",
-                "toString",
+                *(["--json"] if json_output else []),
+                *(["--apply", apply] if apply else []),
                 *self.render_nix_eval_ref(),
             ],
             capture_output=True,
@@ -58,6 +64,12 @@ class BaseNixRef(ABC):
     def run_eval_as_str(self) -> str:
         """Run eval with 'toString' applied."""
         return self.run_eval_raw().strip('"')
+
+    def run_eval_json(self, *, apply: str | None = None) -> object:
+        """Run eval as JSON and parse the result."""
+        return json.loads(
+            self.run_eval_raw(apply=apply, json_output=True)
+        )
 
     @abstractmethod
     def render_nix_eval_ref(self) -> list[str]:
