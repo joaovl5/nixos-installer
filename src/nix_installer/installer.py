@@ -1,10 +1,9 @@
-import json
 from abc import ABC, abstractmethod
 from functools import cached_property
 from pathlib import Path
 from textwrap import dedent
 from time import time
-from typing import TYPE_CHECKING, ClassVar, Generic, TypeVar
+from typing import TYPE_CHECKING, ClassVar, Generic, TypeVar, cast
 from urllib.parse import quote
 from uuid import uuid4
 
@@ -154,8 +153,9 @@ class InstallStep(ABC, Generic[ErrorType_co]):
     ) -> NixRef.Type:
         if prepend_config:
             attr_path = f"config.{attr_path}"
+        install_dir = Path(self.ctx.install_dir).expanduser().resolve()
         return NixRef.File(
-            file=Path(self.ctx.config.install.uri.uri.render()),
+            file=install_dir,
             attr_path=f"nixosConfigurations.{self.ctx.nixos_host}.{attr_path}",
         )
 
@@ -377,7 +377,7 @@ class InstallStep(ABC, Generic[ErrorType_co]):
 
     def mk_error(self, msg: str) -> ErrorType_co:
         """Generate error with message."""
-        return self.error_cls(msg)
+        return cast("ErrorType_co", self.error_cls(msg))
 
 
 @define(kw_only=True)
