@@ -8,7 +8,7 @@ requires-python = ">=3.14"
 dependencies = ["coisas", "cyclopts>=4.16.1", "pydantic>=2.13.4"]
 
 [project.scripts]
-nix-installer = "nix_installer:main"
+nix-installer = "nix_installer.app:main"
 
 [build-system]
 requires = ["uv_build>=0.11.14,<0.12.0"]
