@@ -1,20 +1,19 @@
 import shlex
-from functools import cached_property
+import tempfile
 from pathlib import Path
-from typing import ClassVar, override
+from typing import TYPE_CHECKING, ClassVar, override
 
-from coisas.commands.git import GitCommandFactory
-from coisas.commands.rsync import RsyncCommand
-
-from nix_installer.config import (
-    FetchSSHKeyPairConfig,
-    GitConfig,
-    RefreshDepsAction,
-)
 from nix_installer.installer import (
     InstallStep,
     InstallStepError,
 )
+
+if TYPE_CHECKING:
+    from nix_installer.config import (
+        FetchSSHKeyPairConfig,
+        RefreshDepsAction,
+        UseDiskEncryptionAction,
+    )
 
 _FACTER_PATH: str = "/tmp/facter.json"
 _CACHE_PATH: str = ".cache/nix_installer"
@@ -45,6 +44,62 @@ class ConfigureSubstitutersStep(
             ),
             ssh=True,
         )
+
+
+class SendKeyFileStepError(InstallStepError): ...
+
+
+class SendKeyFileStep(InstallStep[SendKeyFileStepError]):
+    name: ClassVar[str] = "send_key_file"
+    description: ClassVar[str] = (
+        "Decrypt and send keyfile for disk encryption"
+    )
+
+    @property
+    def _cfg(self) -> UseDiskEncryptionAction | None:
+        return self.ctx.config.actions.use_disk_encryption
+
+    @override
+    def should_skip(self) -> bool:
+        return self._cfg is None
+
+    @override
+    def execute(self) -> None:
+        if self._cfg is None:
+            msg = "Action data is unexpectedly missing"
+            raise self.mk_error(msg)
+        sops_key = self._cfg.sops_key or self.ctx.nixos_host
+        if isinstance(sops_key, str):
+            sops_key = [sops_key]
+        # we have to turn the input key, a list of strings, into a
+        # SOPS-compatible yaml selector, which takes a form like:
+        # ["a"]["b"]["c"] (from the list ["a", "b", "c"])
+        built_sops_key = "".join(f'["{part}"]' for part in sops_key)
+        with tempfile.TemporaryDirectory() as tmp_dir_str:
+            tmp_dir = Path(tmp_dir_str)
+            tmp_target_file = tmp_dir / "secret.key"
+            self.run_cmd(
+                "Decrypting disk encryption keyfile with SOPS",
+                [
+                    "sops",
+                    "-d",
+                    "--extract",
+                    built_sops_key,
+                    "--output",
+                    str(tmp_target_file.resolve()),
+                ],
+                env={
+                    "SOPS_AGE_KEY_FILE": str(
+                        self._cfg.sops_age_keyfile.resolve()
+                    ),
+                }
+                if self._cfg.sops_age_keyfile
+                else {},
+            )
+            self.upload_file(
+                source_path=tmp_target_file,
+                target_path=self._cfg.sent_keyfile_location,
+            )
 
 
 class RunDiskoStepError(InstallStepError): ...

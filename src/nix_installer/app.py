@@ -12,10 +12,12 @@ from nix_installer.steps import (
     CommitAndPushStep,
     ConfigureSubstitutersStep,
     DownloadFacterStep,
+    GenerateSSHKeysStep,
     NixOSInstallStep,
     RefreshDepsStep,
     RunDiskoStep,
     RunFacterStep,
+    SendKeyFileStep,
 )
 
 console = Console()
@@ -39,9 +41,11 @@ def _make_installer(
         cli=cli,
         steps=[
             ConfigureSubstitutersStep,
+            SendKeyFileStep,
             RunDiskoStep,
             RunFacterStep,
             DownloadFacterStep,
+            GenerateSSHKeysStep,
             CommitAndPushStep,
             RefreshDepsStep,
             NixOSInstallStep,

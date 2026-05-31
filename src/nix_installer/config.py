@@ -1,7 +1,10 @@
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from coisas.uris import GitURIType
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from coisas.uris import GitURIType
 
 
 class SourceConfig(BaseModel):
@@ -13,8 +16,13 @@ class UseDiskEncryptionAction(BaseModel):
     # 2) secret is sent to target
     # (this assumes usage of SOPS)
     sops_file: Path = Path("secrets/hosts.yaml")  # relative to 'data'
-    sops_key: str | None = (
-        None  # if null, will be assumed to be the host name
+    sops_age_keyfile: Path | None = None
+    sops_key: str | list[str] | None = (
+        # if null, will be assumed to be the host name
+        # do NOT add the '["<thing>"]' syntax, only use the key name
+        # if you need nested keys, use a tuple/list of strings
+        # so ["a", "b", "c"] becomes '["a"]["b"]["c"]'
+        None
     )
     sent_keyfile_location: str = "/tmp/secret.key"  # in target
 

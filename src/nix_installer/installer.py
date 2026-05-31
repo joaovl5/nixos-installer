@@ -6,6 +6,7 @@ from textwrap import dedent
 from time import time
 from typing import TYPE_CHECKING, ClassVar, Generic, TypeVar
 from urllib.parse import quote
+from uuid import uuid4
 
 from attrs import define
 from coisas.commands.git import GitCommandFactory
@@ -16,7 +17,6 @@ from coisas.commands.ssh import SSHCommandWrapper, SSHConfig
 from coisas.commands.sudo import SudoCommandWrapper
 from coisas.commands.wrappers.passthrough import PassthroughCommandWrapper
 
-from nix_installer.config import GitConfig
 from nix_installer.evals import NixRef
 
 if TYPE_CHECKING:
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from coisas.cli.cli import CLIPanelFactory
     from coisas.commands.wrappers.base import BaseCommandWrapper
 
-    from nix_installer.config import AppConfig
+    from nix_installer.config import AppConfig, GitConfig
     from nix_installer.params import AppParams
 
 _CACHE_PATH: str = ".cache/nix_installer"
@@ -228,12 +228,19 @@ class InstallStep(ABC, Generic[ErrorType_co]):
             sudo=True,
         )
 
-    def mk_rsync_cmd(self, src: str, dest: Path) -> RsyncCommand:
+    def mk_rsync_cmd(
+        self,
+        src: str,
+        dest: str,
+        *,
+        remote_dest: bool = True,
+    ) -> RsyncCommand:
         """Make RsyncCommand instance."""
         return RsyncCommand(
             src=src,
-            dest=str(dest),
+            dest=dest,
             ssh_config=self.ctx.ssh_config,
+            remote_dest=remote_dest,
         )
 
     def get_user(self) -> str | None:
@@ -263,13 +270,38 @@ class InstallStep(ABC, Generic[ErrorType_co]):
                 msg = "Couldn't discern what user to get"
                 raise self.mk_error(msg)
 
-    def download_file(self, remote_path: str, destination_path: Path) -> None:
-        """Download a file in target using an intermediary cached dir for handling perms."""
+    def _ensure_cached_dir(self) -> None:
         self.run_cmd(
             "Ensuring remote cache dir exists",
             ["mkdir", "-p", _CACHE_PATH],
             ssh=True,
         )
+
+    def upload_file(self, source_path: Path, target_path: str) -> None:
+        """Upload a file into host using an intermediary cached dir for handling perms."""
+        self._ensure_cached_dir()
+        intermediary_file = f"{_CACHE_PATH}/{uuid4().hex}"
+        self.run_cmd(
+            "Sending file to cache",
+            self.mk_rsync_cmd(
+                src=str(source_path),
+                dest=intermediary_file,
+            ),
+        )
+        self.run_cmd(
+            "Moving file to final location",
+            [
+                "mv",
+                f"~/{intermediary_file}",
+                target_path,
+            ],
+            ssh=True,
+            sudo=True,
+        )
+
+    def download_file(self, remote_path: str, destination_path: Path) -> None:
+        """Download a file in target using an intermediary cached dir for handling perms."""
+        self._ensure_cached_dir()
         remote_cached_path = f"~/{_CACHE_PATH}"
         self.run_cmd(
             "Copying data to cache",
@@ -287,7 +319,8 @@ class InstallStep(ABC, Generic[ErrorType_co]):
             "Downloading remote file",
             self.mk_rsync_cmd(
                 src=remote_cached_path,
-                dest=destination_path,
+                dest=str(destination_path),
+                remote_dest=False,
             ),
         )
 
@@ -300,6 +333,7 @@ class InstallStep(ABC, Generic[ErrorType_co]):
         ssh: bool = False,
         sudo: bool = False,
         use_render_str: str | None = None,
+        env: dict[str, str] | None = None,
     ):
         """Run a command.
 
@@ -310,6 +344,7 @@ class InstallStep(ABC, Generic[ErrorType_co]):
             ssh: If set, will wrap command in `ctx.do_ssh`.
             sudo: If set, will wrap command in `ctx.do_sudo`.
             use_render_str: If set, will override default value for ShellCommandProgram.render_str - will only take effect when 'cmd' is of type 'list[str]'.
+            env: Envvars dict for when 'cmd' is of type list[str].
 
         """
         wrapper: BaseCommandWrapper = PassthroughCommandWrapper()
@@ -325,6 +360,7 @@ class InstallStep(ABC, Generic[ErrorType_co]):
             cmd = ShellCommand(
                 program=program,
                 args=cmd,
+                env=env or {},
             )
         _ = self.cli.run_command(
             command=wrapper | cmd,
