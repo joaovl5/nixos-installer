@@ -13,7 +13,9 @@ class UseDiskEncryptionAction(BaseModel):
     # 2) secret is sent to target
     # (this assumes usage of SOPS)
     sops_file: Path = Path("secrets/hosts.yaml")  # relative to 'data'
-    sops_key: str | None = None  # if null, will be assumed to be the host name
+    sops_key: str | None = (
+        None  # if null, will be assumed to be the host name
+    )
     sent_keyfile_location: str = "/tmp/secret.key"  # in target
 
 
@@ -35,14 +37,17 @@ class FetchSSHKeyPairConfig(BaseModel):
     #    user's home
 
     save_folder: Path = Field(default_factory=lambda: Path("ssh/"))
-    target_copy_folder: str = "/root/.ssh/"  # '/mnt/' gets prepended
+    keyfile_name: str = "main"
+    target_copy_folder: str = "root/.ssh/"  # '/mnt/' gets prepended
     target_copy_to_user: bool = True
 
 
 class FetchHostDataAction(BaseModel):
     # 1) gets some data from the host
     # 2) pushes it in a single-pass to the 'data' repo
-    facter: FetchFacterConfig | None = Field(default_factory=FetchFacterConfig)
+    facter: FetchFacterConfig | None = Field(
+        default_factory=FetchFacterConfig
+    )
     ssh_keypair: FetchSSHKeyPairConfig | None = Field(
         default_factory=FetchSSHKeyPairConfig,
     )
@@ -67,12 +72,20 @@ class ActionsConfig(BaseModel):
 class GitConfig(BaseModel):
     commit: bool = False
     push: bool = False
-    commit_msg: str = "[installer] update data for $HOST"  # gets substituted later
+    commit_user_name: str = "nixos_installer"
+    commit_user_email: str = "nixos_installer@local"
+    commit_msg: str = (
+        "[installer] update data for $HOST"  # gets substituted later
+    )
 
 
 class AppConfig(BaseModel):
-    install: SourceConfig = Field(description="Houses installable configurations.")
-    data: SourceConfig = Field(description="Houses secret or machine-specific data.")
+    install: SourceConfig = Field(
+        description="Houses installable configurations."
+    )
+    data: SourceConfig = Field(
+        description="Houses secret or machine-specific data."
+    )
     actions: ActionsConfig = Field(
         description="Describes configurable actions that are handled during install.",
         default_factory=ActionsConfig,
