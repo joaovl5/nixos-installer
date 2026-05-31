@@ -245,21 +245,24 @@ class InstallStep(ABC, Generic[ErrorType_co]):
 
     def get_user(self) -> str | None:
         """Attempt to get username for the config."""
-        expr_raw = NixRef.Expr(
-            dedent(
-                f"""
-                let
-                    user_list = nixosConfigurations.{self.ctx.nixos_host}.config.users.users;
-                in
+        user_list_raw = self._mk_nix_ref("users.users").run_eval_json(
+            apply=dedent(
+                """
+                user_list:
                     builtins.filter
-                    (name: user_list.${{name}}.isNormalUser or false)
+                    (name: user_list.${name}.isNormalUser or false)
                     (builtins.attrNames user_list)
                 """
-            )
-        ).run_eval_raw()
-        # nix output is effectively identical to json for this case
-        # so we can just run a json parser
-        user_list: list[str] = json.loads(expr_raw)
+            ).strip()
+        )
+        if not isinstance(user_list_raw, list):
+            msg = "Unexpected user list from Nix config"
+            raise self.mk_error(msg)
+        user_list_unknown = cast("list[object]", user_list_raw)
+        if not all(isinstance(user, str) for user in user_list_unknown):
+            msg = "Unexpected user list from Nix config"
+            raise self.mk_error(msg)
+        user_list = cast("list[str]", user_list_unknown)
         match len(user_list):
             case 0:
                 msg = "Found no users for config"
@@ -302,7 +305,7 @@ class InstallStep(ABC, Generic[ErrorType_co]):
     def download_file(self, remote_path: str, destination_path: Path) -> None:
         """Download a file in target using an intermediary cached dir for handling perms."""
         self._ensure_cached_dir()
-        remote_cached_path = f"~/{_CACHE_PATH}"
+        remote_cached_path = f"~/{_CACHE_PATH}/{uuid4().hex}"
         self.run_cmd(
             "Copying data to cache",
             [
@@ -353,13 +356,16 @@ class InstallStep(ABC, Generic[ErrorType_co]):
         if sudo:
             wrapper |= self.ctx.do_sudo
         if isinstance(cmd, list):
-            head = cmd.pop()
+            if not cmd:
+                msg = "Cannot run an empty command"
+                raise self.mk_error(msg)
+            head, *args = cmd
             program = ShellCommandProgram(
                 shell_args=[head], render_str=use_render_str or head
             )
             cmd = ShellCommand(
                 program=program,
-                args=cmd,
+                args=args,
                 env=env or {},
             )
         _ = self.cli.run_command(

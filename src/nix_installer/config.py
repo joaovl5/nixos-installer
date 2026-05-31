@@ -1,14 +1,17 @@
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import ClassVar
 
-from pydantic import BaseModel, Field
-
-if TYPE_CHECKING:
-    from coisas.uris import GitURIType
+from coisas.uris import (
+    GitURIType,  # noqa: TC002 - needed at runtime due to pydantic schema validation
+)
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SourceConfig(BaseModel):
     uri: GitURIType
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        arbitrary_types_allowed=True
+    )
 
 
 class UseDiskEncryptionAction(BaseModel):
