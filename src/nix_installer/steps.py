@@ -75,6 +75,7 @@ class SendKeyFileStep(InstallStep[SendKeyFileStepError]):
         # SOPS-compatible yaml selector, which takes a form like:
         # ["a"]["b"]["c"] (from the list ["a", "b", "c"])
         built_sops_key = "".join(f'["{part}"]' for part in sops_key)
+        sops_path = Path(self.ctx.data_dir).expanduser() / self._cfg.sops_file
         with tempfile.TemporaryDirectory() as tmp_dir_str:
             tmp_dir = Path(tmp_dir_str)
             tmp_target_file = tmp_dir / "secret.key"
@@ -87,10 +88,11 @@ class SendKeyFileStep(InstallStep[SendKeyFileStepError]):
                     built_sops_key,
                     "--output",
                     str(tmp_target_file.resolve()),
+                    str(sops_path),
                 ],
                 env={
                     "SOPS_AGE_KEY_FILE": str(
-                        self._cfg.sops_age_keyfile.resolve()
+                        self._cfg.sops_age_keyfile.expanduser().resolve()
                     ),
                 }
                 if self._cfg.sops_age_keyfile
@@ -154,10 +156,10 @@ class RunFacterStep(InstallStep[RunFacterStepError]):
         )
         self.run_cmd(
             "Running facter",
-            [str(facter_path)],
+            [f"{facter_path}/bin/nixos-facter", "-o", _FACTER_PATH],
             ssh=True,
             sudo=True,
-            use_render_str="disko",
+            use_render_str="nixos-facter",
         )
         self.collect_garbage()
 
@@ -166,8 +168,8 @@ class DownloadFacterStepError(InstallStepError): ...
 
 
 class DownloadFacterStep(InstallStep[DownloadFacterStepError]):
-    name: ClassVar[str] = "run_facter"
-    description: ClassVar[str] = "Build and run facter on target"
+    name: ClassVar[str] = "download_facter"
+    description: ClassVar[str] = "Download facter report from target"
 
     @override
     def should_skip(self) -> bool:
@@ -185,9 +187,9 @@ class DownloadFacterStep(InstallStep[DownloadFacterStepError]):
         if not action.facter:
             msg = "Action facter data unexpectedly missing."
             raise self.mk_error(msg)
-        save_dir = self.ctx.config.data.uri.uri.render()
-        facter_dir_suffix = action.facter.save_folder
-        facter_save_dir = save_dir / facter_dir_suffix
+        facter_save_dir = (
+            Path(self.ctx.data_dir).expanduser() / action.facter.save_folder
+        )
         facter_save_dir.mkdir(parents=True, exist_ok=True)
         destination_file = facter_save_dir / f"{self.ctx.nixos_host}.json"
         self.download_file(
@@ -219,9 +221,15 @@ class GenerateSSHKeysStep(InstallStep[GenerateSSHKeysStepError]):
         if self._cfg is None:
             msg = "Action data unexpectedly missing"
             raise self.mk_error(msg)
-        target_key_dir = f"/mnt/{self._cfg.target_copy_folder}"
+        target_key_dir = f"/mnt/{self._cfg.target_copy_folder.strip('/')}"
         key_path = f"{target_key_dir}/{self._cfg.keyfile_name}"
         key_path_pub = f"{key_path}.pub"
+        self.run_cmd(
+            "Creating target SSH key directory",
+            ["mkdir", "-p", target_key_dir],
+            ssh=True,
+            sudo=True,
+        )
         self.run_cmd(
             "Generating host SSH keypair",
             [
@@ -239,25 +247,39 @@ class GenerateSSHKeysStep(InstallStep[GenerateSSHKeysStepError]):
             sudo=True,
         )
         download_save_path = (
-            Path(self.ctx.data_dir)
+            Path(self.ctx.data_dir).expanduser()
             / self._cfg.save_folder
             / self.ctx.nixos_host
         )
+        download_save_path.parent.mkdir(parents=True, exist_ok=True)
         self.download_file(
             remote_path=key_path_pub,
             destination_path=download_save_path,
         )
         if self._cfg.target_copy_to_user:
             target_user = self.get_user()
+            if target_user is None:
+                msg = "Cannot copy SSH keypair without a target user"
+                raise self.mk_error(msg)
             target_user_key_dir = f"/mnt/home/{target_user}/.ssh"
             user_key_path = f"{target_user_key_dir}/{self._cfg.keyfile_name}"
             user_key_pub_path = f"{user_key_path}.pub"
             self.run_cmd(
+                "Creating target user's SSH key directory",
+                ["install", "-d", "-m", "700", target_user_key_dir],
+                ssh=True,
+                sudo=True,
+            )
+            self.run_cmd(
                 "Copying keypair to target user's home",
                 self.mk_sh(
-                    f"install -m 600 {key_path} {user_key_path} && "
-                    f"install -m 644 {key_path_pub} {user_key_pub_path} && "
+                    f"install -m 600 {shlex.quote(key_path)} "
+                    f"{shlex.quote(user_key_path)} && "
+                    f"install -m 644 {shlex.quote(key_path_pub)} "
+                    f"{shlex.quote(user_key_pub_path)}"
                 ),
+                ssh=True,
+                sudo=True,
             )
 
 
@@ -270,11 +292,11 @@ class CommitAndPushStep(InstallStep[CommitAndPushStepError]):
 
     @override
     def should_skip(self) -> bool:
-        if self.ctx.git_cfg.push and not self.ctx.git_cfg.commit_msg:
-            msg = "Cannot have push set to true and commit not set to true as well"
+        if self.ctx.git_cfg.push and not self.ctx.git_cfg.commit:
+            msg = "Cannot have push set to true and commit set to false"
             raise self.mk_error(msg)
 
-        return not self.ctx.git_cfg.commit or self.ctx.git_cfg.push
+        return not self.ctx.git_cfg.commit
 
     @override
     def execute(self) -> None:
@@ -307,6 +329,9 @@ class RefreshDepsStep(InstallStep[RefreshDepsStepError]):
 
     @override
     def should_skip(self) -> bool:
+        if self.ctx.git_cfg.push and not self.ctx.git_cfg.commit:
+            msg = "Cannot have push set to true and commit set to false"
+            raise self.mk_error(msg)
         return self._cfg is None
 
     @override
@@ -323,6 +348,8 @@ class RefreshDepsStep(InstallStep[RefreshDepsStepError]):
                 f"{self._cfg.command}"
             ),
         )
+        if not self.ctx.git_cfg.commit:
+            return
         self.run_cmd(
             "Staging changed files...",
             self.mk_git_install.add(["."]),
@@ -348,10 +375,15 @@ class NixOSInstallStep(InstallStep[NixOSInstallStepError]):
 
     @override
     def execute(self) -> None:
-        self.run_cmd(
-            "Granting target SSH user write access to /mnt/nix",
-            self.mk_sh("mkdir -p /mnt/nix && chown -R $SUDO_USER /mnt/nix"),
-        )
+        if self.ctx.params.ssh.sudo:
+            self.run_cmd(
+                "Granting target SSH user write access to /mnt/nix",
+                self.mk_sh(
+                    "mkdir -p /mnt/nix && chown -R $SUDO_USER /mnt/nix"
+                ),
+                ssh=True,
+                sudo=True,
+            )
         self.cli.info("Building NixOS system closure...")
         store_path = self.build("system.build.toplevel")
         self.cli.info(f"Built NixOS system closure: {store_path}")
