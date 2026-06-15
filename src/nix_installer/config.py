@@ -1,3 +1,4 @@
+import tomllib
 from pathlib import Path
 from typing import ClassVar
 
@@ -80,6 +81,11 @@ class ActionsConfig(BaseModel):
     refresh_deps: RefreshDepsAction | None = None
 
 
+class NixConfig(BaseModel):
+    extra_env_vars: dict[str, str] = Field(default_factory=dict)
+    extra_args: list[str] = Field(default_factory=list)
+
+
 class GitConfig(BaseModel):
     commit: bool = False
     push: bool = False
@@ -105,3 +111,14 @@ class AppConfig(BaseModel):
         description="Behavior for git actions.",
         default_factory=GitConfig,
     )
+    nix: NixConfig = Field(
+        description="Extra options for local Nix commands.",
+        default_factory=NixConfig,
+    )
+
+
+def read_config_file(file: Path | None = None) -> AppConfig:
+    """Read a config from an assumedly TOML file."""
+    file = file or Path("./config.toml")
+    data = tomllib.loads(file.read_text())
+    return AppConfig.model_validate(data)

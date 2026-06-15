@@ -1,0 +1,55 @@
+#  Example nix-installer configuration.
+# Copy to config.toml and adjust local paths/commands.
+
+[install]
+# Local install/configuration repo. Accepted local URI forms: /abs/path, ./relative/path, ~/path.
+uri = "./path/to/install-repo"
+
+[data]
+# Local repo/path for secret or machine-specific generated data.
+uri = "./path/to/data-repo"
+
+[nix]
+# Extra args are inserted after `nix build` / `nix eval`.
+# Useful for local npins overrides during development.
+# extra_args = ["--impure"]
+extra_args = []
+
+[nix.extra_env_vars]
+# npins local overrides are read from the environment.
+# For a pin named `_private`, the env var is `NPINS_OVERRIDE__private`.
+# NPINS_OVERRIDE__private = "/abs/path/to/local-private-repo"
+
+[actions.use_disk_encryption]
+# Relative to [data].uri.
+sops_file = "secrets/hosts.yaml"
+# Optional explicit AGE key for SOPS.
+# sops_age_keyfile = "~/.age/key.txt"
+# Optional SOPS key. If omitted, installer uses the NixOS host name.
+# For nested YAML keys, use a list such as ["hosts", "example"].
+# sops_key = "example-host"
+sent_keyfile_location = "/tmp/secret.key"
+
+[actions.fetch_host_data.facter]
+# Relative to [data].uri. The installer writes <host>.json here.
+save_folder = "facter/"
+
+[actions.fetch_host_data.ssh_keypair]
+# Relative to [data].uri. The installer writes the fetched public key here.
+save_folder = "ssh/"
+keyfile_name = "main"
+# '/mnt/' is prepended by the installer.
+target_copy_folder = "root/.ssh/"
+target_copy_to_user = true
+
+# Optional dependency refresh action. Omit to keep disabled.
+# [actions.refresh_deps]
+# command = "nix-shell -p npins --run 'npins update data'"
+
+[git]
+commit = false
+push = false
+commit_user_name = "nixos_installer"
+commit_user_email = "nixos_installer@local"
+# $HOST is replaced with params.nixos.host by installer steps.
+commit_msg = "[installer] update data for $HOST"

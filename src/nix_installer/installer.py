@@ -169,7 +169,11 @@ class InstallStep(ABC, Generic[ErrorType_co]):
         return self._mk_nix_ref(
             attr_path=attr_path,
             prepend_config=prepend_config,
-        ).run_eval_as_str()
+        ).run_eval_as_str(
+            cli=self.cli,
+            extra_args=self.ctx.config.nix.extra_args,
+            env=self.ctx.config.nix.extra_env_vars,
+        )
 
     def build(
         self,
@@ -181,7 +185,11 @@ class InstallStep(ABC, Generic[ErrorType_co]):
         return self._mk_nix_ref(
             attr_path=attr_path,
             prepend_config=prepend_config,
-        ).build_drv()
+        ).build_drv(
+            cli=self.cli,
+            extra_args=self.ctx.config.nix.extra_args,
+            env=self.ctx.config.nix.extra_env_vars,
+        )
 
     def mk_sh(self, cmd: str) -> ShellCommand:
         """Make a shell command to be run in POSIX 'sh'."""
@@ -246,6 +254,7 @@ class InstallStep(ABC, Generic[ErrorType_co]):
     def get_user(self) -> str | None:
         """Attempt to get username for the config."""
         user_list_raw = self._mk_nix_ref("users.users").run_eval_json(
+            cli=self.cli,
             apply=dedent(
                 """
                 user_list:
@@ -253,7 +262,9 @@ class InstallStep(ABC, Generic[ErrorType_co]):
                     (name: user_list.${name}.isNormalUser or false)
                     (builtins.attrNames user_list)
                 """
-            ).strip()
+            ).strip(),
+            extra_args=self.ctx.config.nix.extra_args,
+            env=self.ctx.config.nix.extra_env_vars,
         )
         if not isinstance(user_list_raw, list):
             msg = "Unexpected user list from Nix config"
@@ -377,7 +388,7 @@ class InstallStep(ABC, Generic[ErrorType_co]):
 
     def mk_error(self, msg: str) -> ErrorType_co:
         """Generate error with message."""
-        return cast("ErrorType_co", self.error_cls(msg))
+        return self.error_cls(msg)
 
 
 @define(kw_only=True)

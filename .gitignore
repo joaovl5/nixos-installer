@@ -1,0 +1,7 @@
+__pycache__
+.venv
+config.toml
+config.*.toml
+!config.example.toml
+*.install.sh
+!example.install.sh

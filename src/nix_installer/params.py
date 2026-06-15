@@ -19,3 +19,7 @@ class NixOSParams(BaseModel):
 class AppParams(BaseModel):
     ssh: SSHParams
     nixos: NixOSParams
+    config: Path | None = Field(
+        default=None,
+        description="Optional config.toml path override.",
+    )

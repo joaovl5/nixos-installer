@@ -281,6 +281,12 @@ class GenerateSSHKeysStep(InstallStep[GenerateSSHKeysStepError]):
                 ssh=True,
                 sudo=True,
             )
+            self.run_cmd(
+                "Fixing target user's SSH key ownership",
+                ["chown", "-R", f"{target_user}:", target_user_key_dir],
+                ssh=True,
+                sudo=True,
+            )
 
 
 class CommitAndPushStepError(InstallStepError): ...
