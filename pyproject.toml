@@ -143,6 +143,7 @@ reportImplicitStringConcatenation = false
 reportMissingParameterType = true
 reportMissingSuperCall = false
 reportMissingTypeStubs = false
+reportUnannotatedClassAttribute = false
 reportUninitializedInstanceVariable = false
 reportUnknownArgumentType = true
 reportUnknownMemberType = true

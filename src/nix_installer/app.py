@@ -19,6 +19,7 @@ from nix_installer.steps import (
     DownloadFacterStep,
     GenerateSSHKeysStep,
     NixOSInstallStep,
+    PostInstallChownStep,
     RefreshDepsStep,
     RunDiskoStep,
     RunFacterStep,
@@ -54,6 +55,7 @@ def _make_installer(
             CommitAndPushStep,
             RefreshDepsStep,
             NixOSInstallStep,
+            PostInstallChownStep,
         ],
     )
 

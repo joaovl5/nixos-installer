@@ -3,7 +3,7 @@ from functools import cached_property
 from pathlib import Path
 from textwrap import dedent
 from time import time
-from typing import TYPE_CHECKING, ClassVar, Generic, TypeVar, cast
+from typing import TYPE_CHECKING, ClassVar, TypeVar, cast
 from urllib.parse import quote
 from uuid import uuid4
 
@@ -82,21 +82,14 @@ class InstallerContext:
 class InstallStepError(RuntimeError): ...
 
 
-ErrorType_co = TypeVar(
-    "ErrorType_co",
-    bound=InstallStepError,
-    covariant=True,
-)
-
-
-class InstallStep(ABC, Generic[ErrorType_co]):
+class InstallStep(ABC):
     name: ClassVar[str]
     """Step name."""
 
     description: ClassVar[str]
     """Step description."""
 
-    error_cls: type[ErrorType_co]
+    error_cls: type[InstallStepError]
 
     ctx: InstallerContext
     cli: CLIPanelFactory
@@ -386,7 +379,7 @@ class InstallStep(ABC, Generic[ErrorType_co]):
             ok_codes=ok_codes,
         )
 
-    def mk_error(self, msg: str) -> ErrorType_co:
+    def mk_error(self, msg: str) -> InstallStepError:
         """Generate error with message."""
         return self.error_cls(msg)
 
@@ -395,7 +388,7 @@ class InstallStep(ABC, Generic[ErrorType_co]):
 class Installer:
     ctx: InstallerContext
     cli: CLIPanelFactory
-    steps: Sequence[type[InstallStep[InstallStepError]]]
+    steps: Sequence[type[InstallStep]]
 
     def run(self) -> None:
         """Execute all steps."""

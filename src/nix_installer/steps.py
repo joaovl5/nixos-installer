@@ -1,7 +1,7 @@
 import shlex
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, override
+from typing import TYPE_CHECKING, override
 
 from nix_installer.installer import (
     InstallStep,
@@ -22,11 +22,10 @@ _CACHE_PATH: str = ".cache/nix_installer"
 class ConfigureSubstitutersStepError(InstallStepError): ...
 
 
-class ConfigureSubstitutersStep(
-    InstallStep[ConfigureSubstitutersStepError],
-):
-    name: ClassVar[str] = "config_substituters"
-    description: ClassVar[str] = "Configure Nix substituters on target"
+class ConfigureSubstitutersStep(InstallStep):
+    name = "config_substituters"
+    description = "Configure Nix substituters on target"
+    error_cls = ConfigureSubstitutersStepError
 
     @override
     def execute(self) -> None:
@@ -49,11 +48,10 @@ class ConfigureSubstitutersStep(
 class SendKeyFileStepError(InstallStepError): ...
 
 
-class SendKeyFileStep(InstallStep[SendKeyFileStepError]):
-    name: ClassVar[str] = "send_key_file"
-    description: ClassVar[str] = (
-        "Decrypt and send keyfile for disk encryption"
-    )
+class SendKeyFileStep(InstallStep):
+    name = "send_key_file"
+    description = "Decrypt and send keyfile for disk encryption"
+    error_cls = SendKeyFileStepError
 
     @property
     def _cfg(self) -> UseDiskEncryptionAction | None:
@@ -107,9 +105,10 @@ class SendKeyFileStep(InstallStep[SendKeyFileStepError]):
 class RunDiskoStepError(InstallStepError): ...
 
 
-class RunDiskoStep(InstallStep[RunDiskoStepError]):
-    name: ClassVar[str] = "run_disko"
-    description: ClassVar[str] = "Build and run disko on target"
+class RunDiskoStep(InstallStep):
+    name = "run_disko"
+    description = "Build and run disko on target"
+    error_cls = RunDiskoStepError
 
     @override
     def execute(self) -> None:
@@ -133,9 +132,10 @@ class RunDiskoStep(InstallStep[RunDiskoStepError]):
 class RunFacterStepError(InstallStepError): ...
 
 
-class RunFacterStep(InstallStep[RunFacterStepError]):
-    name: ClassVar[str] = "run_facter"
-    description: ClassVar[str] = "Build and run facter on target"
+class RunFacterStep(InstallStep):
+    name = "run_facter"
+    description = "Build and run facter on target"
+    error_cls = RunFacterStepError
 
     @override
     def should_skip(self) -> bool:
@@ -167,9 +167,10 @@ class RunFacterStep(InstallStep[RunFacterStepError]):
 class DownloadFacterStepError(InstallStepError): ...
 
 
-class DownloadFacterStep(InstallStep[DownloadFacterStepError]):
-    name: ClassVar[str] = "download_facter"
-    description: ClassVar[str] = "Download facter report from target"
+class DownloadFacterStep(InstallStep):
+    name = "download_facter"
+    description = "Download facter report from target"
+    error_cls = DownloadFacterStepError
 
     @override
     def should_skip(self) -> bool:
@@ -201,9 +202,10 @@ class DownloadFacterStep(InstallStep[DownloadFacterStepError]):
 class GenerateSSHKeysStepError(InstallStepError): ...
 
 
-class GenerateSSHKeysStep(InstallStep[GenerateSSHKeysStepError]):
-    name: ClassVar[str] = "generate_ssh_keys"
-    description: ClassVar[str] = "Generate SSH keypair"
+class GenerateSSHKeysStep(InstallStep):
+    name = "generate_ssh_keys"
+    description = "Generate SSH keypair"
+    error_cls = GenerateSSHKeysStepError
 
     @property
     def _cfg(self) -> FetchSSHKeyPairConfig | None:
@@ -281,20 +283,15 @@ class GenerateSSHKeysStep(InstallStep[GenerateSSHKeysStepError]):
                 ssh=True,
                 sudo=True,
             )
-            self.run_cmd(
-                "Fixing target user's SSH key ownership",
-                ["chown", "-R", f"{target_user}:", target_user_key_dir],
-                ssh=True,
-                sudo=True,
-            )
 
 
 class CommitAndPushStepError(InstallStepError): ...
 
 
-class CommitAndPushStep(InstallStep[CommitAndPushStepError]):
-    name: ClassVar[str] = "commit_and_push"
-    description: ClassVar[str] = "Commit and push stuff on 'data' source."
+class CommitAndPushStep(InstallStep):
+    name = "commit_and_push"
+    description = "Commit and push stuff on 'data' source."
+    error_cls = CommitAndPushStepError
 
     @override
     def should_skip(self) -> bool:
@@ -325,9 +322,10 @@ class CommitAndPushStep(InstallStep[CommitAndPushStepError]):
 class RefreshDepsStepError(InstallStepError): ...
 
 
-class RefreshDepsStep(InstallStep[RefreshDepsStepError]):
-    name: ClassVar[str] = "refresh_deps"
-    description: ClassVar[str] = "Refresh dependencies in install repo"
+class RefreshDepsStep(InstallStep):
+    name = "refresh_deps"
+    description = "Refresh dependencies in install repo"
+    error_cls = RefreshDepsStepError
 
     @property
     def _cfg(self) -> RefreshDepsAction | None:
@@ -372,24 +370,139 @@ class RefreshDepsStep(InstallStep[RefreshDepsStepError]):
             )
 
 
-class NixOSInstallStepError(InstallStepError): ...
+type ChownOperation = tuple[str, str, str | None, bool]
 
 
-class NixOSInstallStep(InstallStep[NixOSInstallStepError]):
-    name: ClassVar[str] = "nixos_install"
-    description: ClassVar[str] = "Install NixOS closure"
+class PostInstallChownStepError(InstallStepError): ...
+
+
+class PostInstallChownStep(InstallStep):
+    name = "post_install_chown"
+    description = "Fix installed-system file ownership"
+    error_cls = PostInstallChownStepError
+
+    @property
+    def _ssh_key_cfg(self) -> FetchSSHKeyPairConfig | None:
+        action = self.ctx.config.actions.fetch_host_data
+        if not action:
+            return None
+        return action.ssh_keypair
+
+    def _should_fix_ssh_key_ownership(self) -> bool:
+        return (
+            self._ssh_key_cfg is not None
+            and self._ssh_key_cfg.target_copy_to_user
+        )
+
+    @override
+    def should_skip(self) -> bool:
+        return (
+            not self.ctx.params.ssh.sudo
+            and not self._should_fix_ssh_key_ownership()
+        )
+
+    def _ssh_key_operations(self) -> list[ChownOperation]:
+        cfg = self._ssh_key_cfg
+        if cfg is None or not cfg.target_copy_to_user:
+            return []
+        target_user = self.get_user()
+        if target_user is None:
+            msg = "Cannot fix SSH key ownership without a target user"
+            raise self.mk_error(msg)
+        return [(target_user, f"/home/{target_user}/.ssh", None, True)]
+
+    def _operations(self) -> list[ChownOperation]:
+        return self._ssh_key_operations()
+
+    def _owner_spec(self, owner: str, group: str | None) -> str:
+        if group is None:
+            return f"{owner}:"
+        return f"{owner}:{group}"
+
+    def _restore_nix_ownership(self) -> None:
+        self.run_cmd(
+            "Restoring installed /nix ownership",
+            [
+                "chroot",
+                "/mnt",
+                "/nix/var/nix/profiles/system/sw/bin/chown",
+                "-R",
+                "root:root",
+                "/nix",
+            ],
+            ssh=True,
+            sudo=True,
+            use_render_str="chroot chown",
+        )
+        self.run_cmd(
+            "Restoring installed /nix/store permissions",
+            [
+                "chroot",
+                "/mnt",
+                "/nix/var/nix/profiles/system/sw/bin/chmod",
+                "1775",
+                "/nix/store",
+            ],
+            ssh=True,
+            sudo=True,
+            use_render_str="chroot chmod",
+        )
+        self.run_cmd(
+            "Restoring installed /nix/store group",
+            [
+                "chroot",
+                "/mnt",
+                "/nix/var/nix/profiles/system/sw/bin/chown",
+                "root:nixbld",
+                "/nix/store",
+            ],
+            ssh=True,
+            sudo=True,
+            use_render_str="chroot chown",
+        )
 
     @override
     def execute(self) -> None:
         if self.ctx.params.ssh.sudo:
+            self._restore_nix_ownership()
+        for owner, path, group, recursive in self._operations():
             self.run_cmd(
-                "Granting target SSH user write access to /mnt/nix",
-                self.mk_sh(
-                    "mkdir -p /mnt/nix && chown -R $SUDO_USER /mnt/nix"
-                ),
+                f"Fixing installed ownership for {path}",
+                [
+                    "chroot",
+                    "/mnt",
+                    "/nix/var/nix/profiles/system/sw/bin/chown",
+                    *(["-R"] if recursive else []),
+                    self._owner_spec(owner, group),
+                    path,
+                ],
                 ssh=True,
                 sudo=True,
+                use_render_str="chroot chown",
             )
+
+
+class NixOSInstallStepError(InstallStepError): ...
+
+
+class NixOSInstallStep(InstallStep):
+    name = "nixos_install"
+    description = "Install NixOS closure"
+    error_cls = NixOSInstallStepError
+
+    def _grant_nix_copy_access(self) -> None:
+        self.run_cmd(
+            "Granting target SSH user write access to /mnt/nix",
+            self.mk_sh("mkdir -p /mnt/nix && chown -R $SUDO_USER /mnt/nix"),
+            ssh=True,
+            sudo=True,
+        )
+
+
+    @override
+    def execute(self) -> None:
+        if self.ctx.params.ssh.sudo:
+            self._grant_nix_copy_access()
         self.cli.info("Building NixOS system closure...")
         store_path = self.build("system.build.toplevel")
         self.cli.info(f"Built NixOS system closure: {store_path}")
