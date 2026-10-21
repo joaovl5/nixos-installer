@@ -20,3 +20,9 @@ The currently-hardcoded sequence of steps is:
 [nixos-facter]: https://github.com/nix-community/nixos-facter
 
 The script currently has a lot of configuration/parametrization possibilities. The `config.example.toml` and `example.install.sh` files in the repository here serve as aid for that. An example of how I personally used these configurations was to locally iterate on the installer for my config without having to keep updating inputs, so I used a `NPINS_OVERRIDE__private` envvar to avoid that.
+
+## Dependencies
+
+This needs my library [coisas] for working, it's heavily built on top of that. It's currently unpublished, so you should clone it locally and link it with an uv source, like I currently am doing in `pyproject.toml` - eventually I intend to fix that for a better model, potentially publishing it in PyPI.
+
+[coisas]: https://github.com/joaovl5/coisas
