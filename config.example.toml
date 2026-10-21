@@ -1,48 +1,52 @@
-#  Example nix-installer configuration.
-# Copy to config.toml and adjust local paths/commands.
+# Example nixos-installer config
+# Also see `./example.install.sh` for how to use the CLI with this
 
+# The nixos-config to be installed
 [install]
-# Local install/configuration repo. Accepted local URI forms: /abs/path, ./relative/path, ~/path.
 uri = "./path/to/install-repo"
 
+# The repository to treat as "data-dump", e.g. secrets/private repo
 [data]
-# Local repo/path for secret or machine-specific generated data.
 uri = "./path/to/data-repo"
 
 [nix]
-# Extra args are inserted after `nix build` / `nix eval`.
-# Useful for local npins overrides during development.
+# Args for nix calls
 # extra_args = ["--impure"]
 extra_args = []
 
 [nix.extra_env_vars]
-# npins local overrides are read from the environment.
-# For a pin named `_private`, the env var is `NPINS_OVERRIDE__private`.
+# Environment variables for nix calls
 # NPINS_OVERRIDE__private = "/abs/path/to/local-private-repo"
 
 [actions.use_disk_encryption]
-# Relative to [data].uri.
+# Relative to [data].uri
 sops_file = "secrets/hosts.yaml"
-# Optional explicit AGE key for SOPS.
+
+# Optionally you can explicitly set the AGE key for SOPS
 # sops_age_keyfile = "~/.age/key.txt"
-# Optional SOPS key. If omitted, installer uses the NixOS host name.
+
+# Optional SOPS key, defaults to the NixOS hostname.
 # For nested YAML keys, use a list such as ["hosts", "example"].
 # sops_key = "example-host"
+
+# Where the keyfile will go when its sent to the target host
 sent_keyfile_location = "/tmp/secret.key"
 
 [actions.fetch_host_data.facter]
-# Relative to [data].uri. The installer writes <host>.json here.
+# Relative to [data].uri
+# The installer writes <host>.json here
 save_folder = "facter/"
 
 [actions.fetch_host_data.ssh_keypair]
-# Relative to [data].uri. The installer writes the fetched public key here.
+# Relative to [data].uri
+# The installer writes the fetched public key here
 save_folder = "ssh/"
 keyfile_name = "main"
 # '/mnt/' is prepended by the installer.
 target_copy_folder = "root/.ssh/"
 target_copy_to_user = true
 
-# Optional dependency refresh action. Omit to keep disabled.
+# Optional dependency refresh action
 # [actions.refresh_deps]
 # command = "nix-shell -p npins --run 'npins update data'"
 

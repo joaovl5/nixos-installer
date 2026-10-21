@@ -1,15 +1,18 @@
 import json
 import shlex
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, Sequence
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import override
+from typing import TYPE_CHECKING, override
 
 from attrs import define
-from coisas.cli.cli import CLIPanelFactory
 from coisas.commands.nix import NixCommand
 from coisas.commands.shell import ShellCommand, ShellCommandProgram
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+
+    from coisas.cli.cli import CLIPanelFactory
 
 
 class NixRefError(RuntimeError): ...
@@ -38,16 +41,17 @@ class BaseNixRef(ABC):
         with TemporaryDirectory() as tmp_dir_str:
             output_path = Path(tmp_dir_str) / "stdout"
             nix_cmd = self._mk_nix_cmd(args, env=env)
+            arg = (
+                f"{shlex.join(nix_cmd.build())} > "
+                f"{shlex.quote(str(output_path))}"
+            )
             _ = cli.run_command(
                 command=ShellCommand(
                     program=ShellCommandProgram(
                         shell_args=["sh", "-c"],
                         render_str="nix",
                     ),
-                    args=[
-                        f"{shlex.join(nix_cmd.build())} > "
-                        f"{shlex.quote(str(output_path))}"
-                    ],
+                    args=[arg],
                 ),
                 description=description,
                 error_cls=NixRefError,
@@ -145,9 +149,6 @@ class BaseNixRef(ABC):
 
 
 class NixRef:
-    type _IsNixEval[T: BaseNixRef] = T
-    type Type = _IsNixEval[File | Flake | Expr]
-
     @define
     class File(BaseNixRef):
         """Equivalent to --file <file> <attr-path>."""
@@ -179,3 +180,6 @@ class NixRef:
         @override
         def render_nix_eval_ref(self) -> list[str]:
             return ["--expr", self.expr]
+
+    type _IsNixEval[T: BaseNixRef] = T
+    type Type = _IsNixEval[File | Flake | Expr]

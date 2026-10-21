@@ -3,7 +3,7 @@ from functools import cached_property
 from pathlib import Path
 from textwrap import dedent
 from time import time
-from typing import TYPE_CHECKING, ClassVar, TypeVar, cast
+from typing import TYPE_CHECKING, ClassVar, cast
 from urllib.parse import quote
 from uuid import uuid4
 
